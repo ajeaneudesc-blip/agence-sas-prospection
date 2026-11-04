@@ -83,6 +83,10 @@ jobs:
           else
             python3 base-contacts.py init
           fi
+          if [ -f "$GITHUB_WORKSPACE/data/candidats.json" ]; then
+            python3 qualifier.py "$GITHUB_WORKSPACE/data/candidats.json" --ecrire
+            touch "$GITHUB_WORKSPACE/data/.candidats_importes"
+          fi
           python3 lancer.py
           python3 base-contacts.py chiffrer
           cp contacts.db.enc "$GITHUB_WORKSPACE/data/contacts.db.enc"
@@ -93,7 +97,11 @@ jobs:
           set -euo pipefail
           git config user.name "agence-sas-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add contacts.db.enc
+          if [ -f .candidats_importes ]; then
+            git rm -q candidats.json
+            rm -f .candidats_importes
+          fi
+          git add -A
           if git diff --cached --quiet; then
             echo "Aucun changement à sauvegarder."
           else
