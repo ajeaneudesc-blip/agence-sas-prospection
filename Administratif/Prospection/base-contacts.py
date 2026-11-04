@@ -5,6 +5,7 @@ Commandes :
   python base-contacts.py opposer <email>      enregistre une opposition et supprime le contact
   python base-contacts.py purge                supprime les contacts sans contact depuis 24 mois
   python base-contacts.py chiffrer             copie la base en contacts.db.enc (avant sauvegarde)
+  python base-contacts.py migrer               ajoute les tables manquantes à une base existante
 
 Mot de passe : variable BASE_CONTACTS_PASSPHRASE, sinon demandé à la saisie.
 Il ne doit figurer ni dans ce fichier ni dans le dépôt.
@@ -112,6 +113,15 @@ def init(path=None):
     print("Base créée :", path)
 
 
+def migrer(path=None):
+    """Ajoute les tables manquantes (outbox, reponses, oppositions) sans toucher aux données existantes."""
+    conn = connect(path)
+    conn.executescript(SCHEMA)
+    conn.commit()
+    conn.close()
+    print("Migration effectuée : tables à jour, données inchangées.")
+
+
 def opposer(email, path=None, conn=None):
     proprietaire = conn is None
     if proprietaire:
@@ -170,7 +180,7 @@ def chiffrer(path=None, enc=None):
 if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "opposer" and len(sys.argv) == 3:
         opposer(sys.argv[2])
-    elif len(sys.argv) == 2 and sys.argv[1] in ("init", "purge", "chiffrer"):
-        {"init": init, "purge": purge, "chiffrer": chiffrer}[sys.argv[1]]()
+    elif len(sys.argv) == 2 and sys.argv[1] in ("init", "purge", "chiffrer", "migrer"):
+        {"init": init, "purge": purge, "chiffrer": chiffrer, "migrer": migrer}[sys.argv[1]]()
     else:
         sys.exit(__doc__)

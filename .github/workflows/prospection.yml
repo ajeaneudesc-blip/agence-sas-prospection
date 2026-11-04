@@ -9,44 +9,94 @@ on:
 permissions:
   contents: read
 
-# Une seule exécution à la fois. Pas d'annulation en cours de route : un envoi interrompu serait pire.
 concurrency:
   group: prospection
   cancel-in-progress: false
 
 jobs:
-  prospection:
+  passage:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Simulation par défaut. Envoi réel : DRY_RUN=false, LIVE_SEND=true, ADM_VALIDES=true, SMTP_TESTED=true (variables de dépôt).
+      DRY_RUN: ${{ vars.DRY_RUN }}
+      LIVE_SEND: ${{ vars.LIVE_SEND }}
+      ADM_VALIDES: ${{ vars.ADM_VALIDES }}
+      SMTP_TESTED: ${{ vars.SMTP_TESTED }}
+      FROM_ADDR: ${{ vars.FROM_ADDR }}
+      FROM_NAME: ${{ vars.FROM_NAME }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
+      SMTP_LOGIN: ${{ secrets.SMTP_USER }}
+      SMTP_KEY: ${{ secrets.SMTP_PASSWORD }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      BASE_CONTACTS_PASSPHRASE: ${{ secrets.BASE_CONTACTS_PASSPHRASE }}
+      DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
     steps:
+      - name: Garde-fous
+        run: |
+          set -euo pipefail
+          DRY_RUN="${DRY_RUN:-true}"
+          LIVE_SEND="${LIVE_SEND:-false}"
+          echo "DRY_RUN=$DRY_RUN LIVE_SEND=$LIVE_SEND ADM_VALIDES=${ADM_VALIDES:-} SMTP_TESTED=${SMTP_TESTED:-}"
+          if [ "$LIVE_SEND" = "true" ]; then
+            if [ "$DRY_RUN" != "false" ] || [ "${ADM_VALIDES:-}" != "true" ] || [ "${SMTP_TESTED:-}" != "true" ]; then
+              echo "Envoi réel demandé sans les conditions requises. Arrêt."
+              exit 1
+            fi
+          fi
+          if [ -z "${DATA_REPO_TOKEN:-}" ]; then
+            echo "DATA_REPO_TOKEN absent : les données de prospection ne peuvent pas être lues. Arrêt."
+            exit 1
+          fi
+
       - name: Code du dépôt (sans identifiants persistés)
         uses: actions/checkout@v4
         with:
           persist-credentials: false
 
-      - name: Garde-fous
+      - name: Dépôt privé des données
         env:
-          # DRY_RUN vaut true par défaut. Un envoi réel exige DRY_RUN=false ET LIVE_SEND=true,
-          # et l'utilisateur doit aussi poser ADM_VALIDES=true (ADM-002 et ADM-003 tranchés)
-          # et SMTP_TESTED=true (test SMTP OVH réussi).
-          DRY_RUN: ${{ vars.DRY_RUN }}
-          LIVE_SEND: ${{ vars.LIVE_SEND }}
-          ADM_VALIDES: ${{ vars.ADM_VALIDES }}
-          SMTP_TESTED: ${{ vars.SMTP_TESTED }}
-        shell: bash
+          TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
           set -euo pipefail
-          DRY_RUN="${DRY_RUN:-true}"
-          LIVE_SEND="${LIVE_SEND:-false}"
-          ADM_VALIDES="${ADM_VALIDES:-false}"
-          SMTP_TESTED="${SMTP_TESTED:-false}"
-          echo "DRY_RUN=$DRY_RUN LIVE_SEND=$LIVE_SEND ADM_VALIDES=$ADM_VALIDES SMTP_TESTED=$SMTP_TESTED"
-          if [ "$LIVE_SEND" = "true" ]; then
-            if [ "$DRY_RUN" != "false" ] || [ "$ADM_VALIDES" != "true" ] || [ "$SMTP_TESTED" != "true" ]; then
-              echo "Envoi réel demandé sans les conditions requises (DRY_RUN=false, ADM_VALIDES=true, SMTP_TESTED=true). Arrêt."
-              exit 1
-            fi
-            echo "Envoi réel autorisé, mais aucun module d'envoi n'est encore branché dans ce dépôt. Arrêt."
-            exit 1
+          git clone --depth 1 "https://x-access-token:${TOKEN}@github.com/ajeaneudesc-blip/agence-sas-donnees.git" data
+          if [ -f data/contacts.db.enc ]; then
+            cp data/contacts.db.enc Administratif/Prospection/contacts.db.enc
+            echo "Base chiffrée récupérée."
+          else
+            echo "Pas encore de base chiffrée : elle sera créée."
           fi
-          echo "Mode simulation. Aucun prospect, aucun envoi, aucune donnée."
+
+      - name: Python et dépendances
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install anthropic sqlcipher3-binary
+
+      - name: Passage
+        working-directory: Administratif/Prospection
+        run: |
+          set -euo pipefail
+          if [ -f contacts.db.enc ]; then
+            cp contacts.db.enc contacts.db
+          else
+            python3 base-contacts.py init
+          fi
+          python3 lancer.py
+          python3 base-contacts.py chiffrer
+          cp contacts.db.enc "$GITHUB_WORKSPACE/data/contacts.db.enc"
+
+      - name: Sauvegarde chiffrée dans le dépôt privé
+        working-directory: data
+        run: |
+          set -euo pipefail
+          git config user.name "agence-sas-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add contacts.db.enc
+          if git diff --cached --quiet; then
+            echo "Aucun changement à sauvegarder."
+          else
+            git commit -q -m "Passage du $(date -u +%F) (base chiffrée)"
+            git push -q origin HEAD:main
+          fi
