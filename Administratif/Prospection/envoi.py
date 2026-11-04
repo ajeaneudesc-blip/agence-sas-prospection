@@ -20,6 +20,7 @@ from datetime import date, timedelta
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from html import escape
+from urllib.parse import quote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUTILS = os.path.join(HERE, "..", "Outils", "Prospection Mondiale")
@@ -105,12 +106,52 @@ def _offre(cle, langue):
     return offres[cle][langue]  # [libellé du bouton, titre, texte pré-rempli]
 
 
+RAW_BASE = os.environ.get(
+    "RAW_BASE", "https://raw.githubusercontent.com/ajeaneudesc-blip/agence-sas-prospection/main"
+)
+ASSETS_DIR = os.path.join(OUTILS, "Assets Mail")
+
+
+def _url_asset(nom_fichier):
+    return RAW_BASE + "/Administratif/Outils/Prospection%20Mondiale/Assets%20Mail/" + quote(nom_fichier)
+
+
+def _dimensions_gif(chemin):
+    with open(chemin, "rb") as f:
+        h = f.read(10)
+    return int.from_bytes(h[6:8], "little"), int.from_bytes(h[8:10], "little")
+
+
+def _dimensions_png(chemin):
+    with open(chemin, "rb") as f:
+        h = f.read(24)
+    return int.from_bytes(h[16:20], "big"), int.from_bytes(h[20:24], "big")
+
+
+def _ressources(offre_cle, langue):
+    """Retourne (bannière, bouton, photo) : chemins locaux existants, sinon None."""
+    with open(OFFRES_JSON, encoding="utf-8") as f:
+        nom = json.load(f)[offre_cle]["nom"]
+    suffixe = "Fr" if langue == "fr" else "En"
+    candidats = {
+        "banniere": f"Banniere {nom}.gif",
+        "bouton": f"Bouton {nom} {suffixe}.png",
+        "photo": "Photo Signature.png",
+    }
+    return {
+        cle: (nom_f if os.path.exists(os.path.join(ASSETS_DIR, nom_f)) else None)
+        for cle, nom_f in candidats.items()
+    }
+
+
 def rendre_html(msg, offre_cle, adresse_contact, desinscription_mailto, hero_url=None, photo_url=None):
-    """Gabarit HTML : sans logo, sans slogan, sans nom « Start And Shift » (offre personnelle)."""
+    """Gabarit HTML validé : bannière animée de l'offre, bouton graphique, photo de signature.
+    Sans logo, sans slogan, sans nom « Start And Shift » (offre personnelle)."""
     with open(MODELE_HTML, encoding="utf-8") as f:
         html = f.read()
 
     langue = msg["langue"] if msg["langue"] in ("fr", "en") else "fr"
+    ressources = _ressources(offre_cle, langue)
     corps_html = "".join(
         f"<p style=\"margin:0 0 14px 0;\">{escape(p.strip()).replace(chr(10), '<br>')}</p>"
         for p in re.split(r"\n\s*\n", msg["corps"].strip())
@@ -122,14 +163,23 @@ def rendre_html(msg, offre_cle, adresse_contact, desinscription_mailto, hero_url
     lien = (
         f"mailto:{adresse_contact}?subject={sujet_reponse}&body={pre_rempli}".replace(" ", "%20")
     )
-    cta = (
-        f'<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" '
-        f'style="margin:24px auto 0 auto;"><tr><td align="center" bgcolor="#095CFF" '
-        f'style="border-radius:999px;padding:12px 22px;">'
-        f'<a href="{escape(lien)}" style="font-family:Geist,Segoe UI,Helvetica,Arial,sans-serif;'
-        f'font-size:15px;font-weight:600;color:#FFFFFF;text-decoration:none;">{escape(bouton_txt)}</a>'
-        f"</td></tr></table>"
-    )
+    if ressources["bouton"]:
+        bw, bh = _dimensions_png(os.path.join(ASSETS_DIR, ressources["bouton"]))
+        cta = (
+            f'<a href="{escape(lien)}" style="text-decoration:none;">'
+            f'<img src="{escape(_url_asset(ressources["bouton"]))}" width="{bw}" height="{bh}" '
+            f'alt="{escape(bouton_txt)}" style="display:block;margin:24px auto 0 auto;border:0;'
+            f'outline:none;width:{bw}px;max-width:100%;height:auto;"></a>'
+        )
+    else:
+        cta = (
+            f'<table role="presentation" align="center" cellpadding="0" cellspacing="0" border="0" '
+            f'style="margin:24px auto 0 auto;"><tr><td align="center" bgcolor="#095CFF" '
+            f'style="border-radius:999px;padding:12px 22px;">'
+            f'<a href="{escape(lien)}" style="font-family:Geist,Segoe UI,Helvetica,Arial,sans-serif;'
+            f'font-size:15px;font-weight:600;color:#FFFFFF;text-decoration:none;">{escape(bouton_txt)}</a>'
+            f"</td></tr></table>"
+        )
     pied = (
         f'<div style="font-size:11px;line-height:16px;color:#8A8A8A;padding-top:18px;">'
         f'Vous ne souhaitez plus recevoir de message ? '
@@ -152,12 +202,17 @@ def rendre_html(msg, offre_cle, adresse_contact, desinscription_mailto, hero_url
     # Logo et slogan retirés (offre personnelle). Image héros et photo : seulement si une URL publique est fournie.
     html = re.sub(r"<!--LOGO-->.*?<!--/LOGO-->", "", html, flags=re.S)
     html = re.sub(r"<!--SLOGAN-->.*?<!--/SLOGAN-->", "", html, flags=re.S)
-    if hero_url:
-        html = html.replace("{{HERO_SRC}}", escape(hero_url))
+    if ressources["banniere"] or hero_url:
+        url_b = hero_url or _url_asset(ressources["banniere"])
+        bw, bh = _dimensions_gif(os.path.join(ASSETS_DIR, ressources["banniere"])) if ressources["banniere"] else (600, 300)
+        html = html.replace("{{HERO_SRC}}", escape(url_b))
+        html = html.replace("{{HERO_W}}", str(bw)).replace("{{HERO_H}}", str(bh))
+        html = html.replace("{{HERO_ALT}}", escape(_titre))
     else:
         html = re.sub(r'<img src="\{\{HERO_SRC\}\}"[^>]*>', "", html)
-    if photo_url:
-        html = html.replace("{{PHOTO_SRC}}", escape(photo_url))
+    if ressources["photo"] or photo_url:
+        url_p = photo_url or _url_asset(ressources["photo"])
+        html = html.replace("{{PHOTO_SRC}}", escape(url_p))
     else:
         html = re.sub(r"<!--PHOTO-->.*?<!--/PHOTO-->", "", html, flags=re.S)
     if "{{" in html:
