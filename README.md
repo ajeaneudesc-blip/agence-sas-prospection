@@ -10,7 +10,8 @@ Les données (contacts, oppositions, file d'envoi) sont dans le dépôt privé `
 
 ## Garde-fous
 - `DRY_RUN` : `true` par défaut (variable de dépôt).
-- `LIVE_SEND` : `false` par défaut. Passe à `true` seulement après validation d'ADM-002 et ADM-003 et d'un test SMTP OVH. Le workflow refuse un envoi réel tant que le module d'envoi n'existe pas.
+- `LIVE_SEND` : `false` par défaut. Un envoi réel exige `DRY_RUN=false`, `LIVE_SEND=true`, `ADM_VALIDES=true` (ADM-002 et ADM-003 tranchés) et `SMTP_TESTED=true` (test SMTP OVH réussi). Ces quatre variables sont posées par l'utilisateur. Le workflow refuse tout autre cas.
+- Pas de réessai automatique : un échec arrête le workflow. Une seule exécution à la fois.
 
 ## Secrets attendus (GitHub → Settings → Secrets and variables → Actions)
 Noms seulement, valeurs jamais dans le dépôt ni dans le chat :
