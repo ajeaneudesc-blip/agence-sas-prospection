@@ -1,0 +1,6 @@
+# Codes pays (ISO) où l'agent n'envoie AUCUN e-mail à froid. LinkedIn et WhatsApp restent possibles : tu les envoies toi-même.
+# Liste de départ, à faire relire par un juriste (R4). Toi seul la modifies.
+DE  # Allemagne
+AT  # Autriche
+IT  # Italie
+CA  # Canada
