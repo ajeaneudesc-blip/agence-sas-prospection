@@ -130,8 +130,59 @@ def valider(msg, type_envoi="premier"):
     return motifs
 
 
+def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
+    """Secours sans API : remplit le gabarit VALIDÉ avec la phrase de raison vérifiée du prospect.
+    Le texte reste celui du gabarit validé ; seules les accolades sont remplies. Même validateur ensuite."""
+    phrase = (prospect.get("phrase") or "").strip()
+    if not phrase:
+        raise ValueError("Phrase de raison absente : impossible de rédiger sans API.")
+    lignes = gabarit_fr.split("\n")
+    objet = ""
+    corps_l = []
+    for ligne in lignes:
+        if ligne.strip().startswith("Bouton"):
+            break
+        if ligne.startswith("Objet :"):
+            objet = ligne[len("Objet :"):].strip()
+            continue
+        corps_l.append(ligne)
+    corps = "\n".join(corps_l).strip()
+    nom = prospect.get("nom", "")
+    objet = re.sub(r"\{Entreprise\}", nom, objet)
+    corps = re.sub(r"\{Entreprise\}", nom, corps)
+    corps = re.sub(r"\{Prénom[^}]*\}", "Madame, Monsieur", corps)
+    corps = re.sub(r"\{RAISON[^}]*\}", phrase, corps)
+    corps = re.sub(r"\{produit ou service\}", prospect.get("produit") or "vos services", corps)
+    corps = re.sub(r"\{Marque\}", nom, corps)
+    corps = re.sub(r"\{Agence\}", nom, corps)
+    if "{" in corps or "{" in objet:
+        raise ValueError("Accolades restantes dans le gabarit : rédaction refusée.")
+    return {
+        "objet": objet,
+        "corps": corps,
+        "offre": prospect.get("offre", ""),
+        "langue": "fr",
+        "raison": prospect.get("raison", ""),
+        "source": prospect.get("source_url", ""),
+        "date": prospect.get("date_consultation", ""),
+    }
+
+
 def generer(prospect, gabarit_fr, type_envoi="premier"):
-    """Appelle l'API et renvoie le message validé, ou lève une erreur. Jamais d'envoi ici."""
+    """Appelle l'API et renvoie le message validé, ou lève une erreur. Jamais d'envoi ici.
+    Si l'API échoue (ex. solde insuffisant), bascule sur rendu_sans_api, puis le même validateur."""
+    try:
+        return _generer_api(prospect, gabarit_fr, type_envoi)
+    except Exception as e:
+        print(f"[API indisponible : {type(e).__name__}] rédaction par gabarit validé pour {prospect.get('nom')}")
+        msg = rendu_sans_api(prospect, gabarit_fr, type_envoi)
+        motifs = valider(msg, type_envoi)
+        if motifs:
+            raise ValueError("Message refusé (sans API) : " + " ; ".join(motifs))
+        return msg
+
+
+def _generer_api(prospect, gabarit_fr, type_envoi="premier"):
     import anthropic
 
     cle = os.environ.get("ANTHROPIC_API_KEY")

@@ -107,7 +107,10 @@ def ecrire(cand, conn):
             cand["date_consultation"].strip(),
             "a contacter",
             date.today().isoformat(),
-            "Raison vérifiée : " + cand["raison"].strip() + " | Offre : " + cand.get("offre", "").strip(),
+            "Raison vérifiée : " + cand["raison"].strip()
+            + " | Offre : " + cand.get("offre", "").strip()
+            + " | Phrase : " + cand.get("phrase", "").strip()
+            + " | Produit : " + cand.get("produit", "").strip(),
         ),
     )
 

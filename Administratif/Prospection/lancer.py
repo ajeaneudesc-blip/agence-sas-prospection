@@ -33,6 +33,11 @@ def prochain_jour_ouvre(d):
     return d
 
 
+def champ_depuis_notes(notes, nom):
+    m = re.search(nom + r" : ([^|]*)", notes or "")
+    return m.group(1).strip() if m else ""
+
+
 def offre_depuis_notes(notes):
     m = re.search(r"Offre : (\w+)", notes or "")
     return m.group(1) if m else None
@@ -84,7 +89,12 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
         if cle not in gabarits:
             raise RuntimeError(f"Gabarit « {cle} » absent ou non VALIDÉ : arrêt.")
         offre, gabarit_fr = gabarits[cle]
-        prospect = {"nom": nom, "pays": pays, "source_url": source, "date_consultation": source_date}
+        notes = conn.execute("SELECT notes FROM prospects WHERE id = ?", (pid,)).fetchone()[0]
+        prospect = {
+            "nom": nom, "pays": pays, "source_url": source, "date_consultation": source_date,
+            "offre": offre_depuis_notes(notes), "raison": champ_depuis_notes(notes, "Raison vérifiée"),
+            "phrase": champ_depuis_notes(notes, "Phrase"), "produit": champ_depuis_notes(notes, "Produit"),
+        }
         msg = redaction.generer(prospect, gabarit_fr, typ)
         desinscription = f"mailto:{env['FROM_ADDR']}?subject=Desinscription"
         html = envoi.rendre_html(msg, offre or msg["offre"], env["FROM_ADDR"], desinscription)
