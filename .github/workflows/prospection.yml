@@ -33,6 +33,7 @@ jobs:
       BASE_CONTACTS_PASSPHRASE: ${{ secrets.BASE_CONTACTS_PASSPHRASE }}
       DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
       SORTIE_SIMULATION: ${{ github.workspace }}/data/simulations
+      DONNEES_DIR: ${{ github.workspace }}/data
     steps:
       - name: Garde-fous
         run: |
