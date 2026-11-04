@@ -109,9 +109,6 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
         if mode_reel:
             conn.execute("UPDATE outbox SET statut = 'envoye', date_envoi = ? WHERE id = ?", (aujourdhui.isoformat(), oid))
             conn.execute("UPDATE prospects SET dernier_contact = ? WHERE id = ?", (aujourdhui.isoformat(), pid))
-        else:
-            # Simulation : rien n'est parti. Le message ne doit pas compter comme envoyé.
-            conn.execute("UPDATE outbox SET statut = 'simule' WHERE id = ?", (oid,))
         conn.commit()
         print(f"[{etat}] {nom} ({typ})")
         traites += 1
@@ -145,8 +142,8 @@ def main():
     conn = base.connect()
     try:
         if not mode_reel:
-            # La simulation ne peut rien avoir envoyé : les lignes marquées « envoye » par erreur redeviennent simulées.
-            conn.execute("UPDATE outbox SET statut = 'simule', date_envoi = NULL WHERE statut = 'envoye'")
+            # La simulation ne peut rien avoir envoyé : les lignes marquées « envoye » par erreur retournent en file.
+            conn.execute("UPDATE outbox SET statut = 'file', date_envoi = NULL WHERE statut = 'envoye'")
             conn.commit()
         nouveaux = preparer(conn, date.today())
         print(f"File : {nouveaux} prospect(s) ajouté(s).")
