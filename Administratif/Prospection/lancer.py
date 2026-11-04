@@ -124,6 +124,9 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
             "phrase": champ_depuis_notes(notes, "Phrase"), "produit": champ_depuis_notes(notes, "Produit"),
         }
         msg = redaction.generer(prospect, gabarit_fr, typ)
+        if mode_reel and not msg.get("humanise"):
+            # Envoi réel : un message non passé par l'humanizer ne part pas (rédaction de secours sans API).
+            raise RuntimeError("Message non humanisé (API indisponible) : envoi réel refusé, rien n'est parti.")
         desinscription = f"mailto:{env['FROM_ADDR']}?subject=Desinscription"
         html = envoi.rendre_html(msg, offre or msg["offre"], env["FROM_ADDR"], desinscription)
         texte = envoi.rendre_texte(msg, env["FROM_ADDR"], desinscription)

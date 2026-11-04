@@ -136,9 +136,6 @@ def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
     phrase = (prospect.get("phrase") or "").strip()
     if not phrase:
         raise ValueError("Phrase de raison absente : impossible de rédiger sans API.")
-    if prospect.get("pays") == "MU":
-        # Prospect à Maurice : on le précise. Pour les autres pays, rien n'est ajouté.
-        phrase = phrase + " Je suis moi-même installé à Maurice."
     lignes = gabarit_fr.split("\n")
     objet = ""
     corps_l = []
@@ -160,6 +157,14 @@ def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
     corps = re.sub(r"\{Agence\}", nom, corps)
     if "{" in corps or "{" in objet:
         raise ValueError("Accolades restantes dans le gabarit : rédaction refusée.")
+    if prospect.get("pays") == "MU":
+        # Prospect à Maurice : précisé juste après la présentation (« Je suis … »). Autres pays : rien ajouté.
+        paragraphes = corps.split("\n\n")
+        for i, p in enumerate(paragraphes):
+            if p.startswith("Je suis "):
+                paragraphes[i] = p.rstrip() + " Je suis basé à Maurice."
+                break
+        corps = "\n\n".join(paragraphes)
     return {
         "objet": objet,
         "corps": corps,
@@ -168,7 +173,40 @@ def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
         "raison": prospect.get("raison", ""),
         "source": prospect.get("source_url", ""),
         "date": prospect.get("date_consultation", ""),
+        "humanise": False,
     }
+
+
+RegleHumanizer = (
+    "Réécris ce message de prospection en français pour qu'il sonne humain, poli, et centré sur le problème "
+    "du prospect. Garde tous les faits, la structure, l'offre et la question finale. Interdits : « ce n'est pas X, "
+    "c'est Y », formules de « punchline » en fin de paragraphe, tirets longs (— et –), listes de trois par "
+    "réflexe, mots enflés (crucial, pivotal, testament, vibrant, robuste), phrases de connivence. Pas de chiffre, "
+    "pas de prix, pas de « nous ». Réponds uniquement par le JSON demandé."
+)
+
+
+def humaniser(msg, prospect):
+    """Passe le message par l'API avec les règles de l'humanizer. Renvoie le message réécrit, validé."""
+    import anthropic
+
+    cle = os.environ.get("ANTHROPIC_API_KEY")
+    if not cle:
+        raise RuntimeError("ANTHROPIC_API_KEY absent : humanizer impossible.")
+    client = anthropic.Anthropic(api_key=cle)
+    consigne = (
+        RegleHumanizer + "\n\nMessage :\n" + json.dumps(msg, ensure_ascii=False)
+        + "\n\nRéponds par un objet JSON avec les clés objet, corps, offre, langue, raison, source, date."
+    )
+    rep = client.messages.create(model=MODEL, max_tokens=1200, messages=[{"role": "user", "content": consigne}])
+    texte = "".join(b.text for b in rep.content if getattr(b, "type", "") == "text").strip()
+    texte = re.sub(r"^```(?:json)?|```$", "", texte).strip()
+    nouveau = json.loads(texte)
+    motifs = valider(nouveau, "premier")
+    if motifs:
+        raise ValueError("Après humanizer, message refusé : " + " ; ".join(motifs))
+    nouveau["humanise"] = True
+    return nouveau
 
 
 def generer(prospect, gabarit_fr, type_envoi="premier"):
@@ -211,4 +249,4 @@ def _generer_api(prospect, gabarit_fr, type_envoi="premier"):
     motifs = valider(msg, type_envoi)
     if motifs:
         raise ValueError("Message refusé : " + " ; ".join(motifs))
-    return msg
+    return humaniser(msg, prospect)
