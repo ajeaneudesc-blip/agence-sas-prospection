@@ -9,23 +9,44 @@ on:
 permissions:
   contents: read
 
+# Une seule exécution à la fois. Pas d'annulation en cours de route : un envoi interrompu serait pire.
+concurrency:
+  group: prospection
+  cancel-in-progress: false
+
 jobs:
   prospection:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: Code du dépôt (sans identifiants persistés)
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - name: Garde-fous
         env:
-          # DRY_RUN par défaut à true. LIVE_SEND ne passe à true que sur décision
-          # de l'utilisateur, après ADM-002, ADM-003 et un test SMTP OVH.
+          # DRY_RUN vaut true par défaut. Un envoi réel exige DRY_RUN=false ET LIVE_SEND=true,
+          # et l'utilisateur doit aussi poser ADM_VALIDES=true (ADM-002 et ADM-003 tranchés)
+          # et SMTP_TESTED=true (test SMTP OVH réussi).
           DRY_RUN: ${{ vars.DRY_RUN }}
           LIVE_SEND: ${{ vars.LIVE_SEND }}
+          ADM_VALIDES: ${{ vars.ADM_VALIDES }}
+          SMTP_TESTED: ${{ vars.SMTP_TESTED }}
+        shell: bash
         run: |
+          set -euo pipefail
           DRY_RUN="${DRY_RUN:-true}"
           LIVE_SEND="${LIVE_SEND:-false}"
-          echo "DRY_RUN=$DRY_RUN LIVE_SEND=$LIVE_SEND"
+          ADM_VALIDES="${ADM_VALIDES:-false}"
+          SMTP_TESTED="${SMTP_TESTED:-false}"
+          echo "DRY_RUN=$DRY_RUN LIVE_SEND=$LIVE_SEND ADM_VALIDES=$ADM_VALIDES SMTP_TESTED=$SMTP_TESTED"
           if [ "$LIVE_SEND" = "true" ]; then
-            echo "Envoi réel demandé, mais aucun module d'envoi n'existe à l'étape 2. Arrêt."
+            if [ "$DRY_RUN" != "false" ] || [ "$ADM_VALIDES" != "true" ] || [ "$SMTP_TESTED" != "true" ]; then
+              echo "Envoi réel demandé sans les conditions requises (DRY_RUN=false, ADM_VALIDES=true, SMTP_TESTED=true). Arrêt."
+              exit 1
+            fi
+            echo "Envoi réel autorisé, mais aucun module d'envoi n'est encore branché dans ce dépôt. Arrêt."
             exit 1
           fi
-          echo "Étape 2 : squelette. Aucun prospect, aucun envoi, aucune donnée."
+          echo "Mode simulation. Aucun prospect, aucun envoi, aucune donnée."
