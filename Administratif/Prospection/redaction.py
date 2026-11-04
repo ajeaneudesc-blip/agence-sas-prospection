@@ -136,6 +136,9 @@ def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
     phrase = (prospect.get("phrase") or "").strip()
     if not phrase:
         raise ValueError("Phrase de raison absente : impossible de rédiger sans API.")
+    if prospect.get("pays") == "MU":
+        # Prospect à Maurice : on le précise. Pour les autres pays, rien n'est ajouté.
+        phrase = phrase + " Je suis moi-même installé à Maurice."
     lignes = gabarit_fr.split("\n")
     objet = ""
     corps_l = []

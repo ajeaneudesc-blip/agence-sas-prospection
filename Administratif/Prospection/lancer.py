@@ -11,6 +11,7 @@ Usage : py -3 lancer.py            (simulation si DRY_RUN n'est pas false)
 """
 
 import importlib.util
+import json
 import os
 import re
 import sys
@@ -41,6 +42,33 @@ def champ_depuis_notes(notes, nom):
 def offre_depuis_notes(notes):
     m = re.search(r"Offre : (\w+)", notes or "")
     return m.group(1) if m else None
+
+
+def appliquer_corrections(conn):
+    """Lit DONNEES_DIR/corrections.json : retire un prospect (retirer=true) ou remplace sa phrase de raison.
+    Le fichier est marqué traité pour ne pas s'appliquer deux fois."""
+    dossier = os.environ.get("DONNEES_DIR", "")
+    chemin = os.path.join(dossier, "corrections.json") if dossier else ""
+    if not chemin or not os.path.exists(chemin):
+        return 0
+    with open(chemin, encoding="utf-8") as f:
+        corrections = json.load(f)
+    for c in corrections:
+        email = c["email"].strip().lower()
+        ids = [r[0] for r in conn.execute("SELECT id FROM prospects WHERE lower(email) = ?", (email,))]
+        for pid in ids:
+            if c.get("retirer"):
+                conn.execute("UPDATE prospects SET statut = 'retire' WHERE id = ?", (pid,))
+                conn.execute("UPDATE outbox SET statut = 'annule' WHERE prospect_id = ? AND statut = 'file'", (pid,))
+                print(f"[retiré] {email}")
+            elif c.get("phrase"):
+                notes = conn.execute("SELECT notes FROM prospects WHERE id = ?", (pid,)).fetchone()[0] or ""
+                nouvelles = re.sub(r"Phrase : [^|]*", "Phrase : " + c["phrase"].replace("|", "/"), notes)
+                conn.execute("UPDATE prospects SET notes = ? WHERE id = ?", (nouvelles, pid))
+                print(f"[phrase mise à jour] {email}")
+    conn.commit()
+    os.rename(chemin, chemin + ".traite")
+    return len(corrections)
 
 
 def preparer(conn, aujourdhui):
@@ -145,6 +173,7 @@ def main():
             # La simulation ne peut rien avoir envoyé : les lignes marquées « envoye » par erreur retournent en file.
             conn.execute("UPDATE outbox SET statut = 'file', date_envoi = NULL WHERE statut = 'envoye'")
             conn.commit()
+        appliquer_corrections(conn)
         nouveaux = preparer(conn, date.today())
         print(f"File : {nouveaux} prospect(s) ajouté(s).")
         traites = traiter_file(conn, date.today(), base, envoi, redaction, exclus, mode_reel, env)

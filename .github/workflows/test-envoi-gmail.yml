@@ -1,0 +1,33 @@
+name: test-envoi-gmail
+
+# Manuel uniquement : envoie un message de test (design réel) à l'adresse indiquée. Aucun prospect.
+on:
+  workflow_dispatch:
+    inputs:
+      destinataire:
+        description: "Adresse de test"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Envoi de test
+        env:
+          FROM_ADDR: ${{ vars.FROM_ADDR }}
+          FROM_NAME: ${{ vars.FROM_NAME }}
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_LOGIN: ${{ secrets.SMTP_USER }}
+          SMTP_KEY: ${{ secrets.SMTP_PASSWORD }}
+        run: python3 Administratif/Prospection/envoi_test.py "${{ inputs.destinataire }}"
