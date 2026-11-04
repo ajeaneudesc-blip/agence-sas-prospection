@@ -9,25 +9,23 @@ on:
 permissions:
   contents: read
 
-env:
-  # Garde-fous : DRY_RUN=true par défaut. Un envoi réel exige LIVE_SEND=true,
-  # posé par l'utilisateur après ADM-002, ADM-003 et un test SMTP OVH.
-  DRY_RUN: ${{ vars.DRY_RUN || 'true' }}
-  LIVE_SEND: ${{ vars.LIVE_SEND || 'false' }}
-
 jobs:
   prospection:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - name: Garde-fous
+        env:
+          # DRY_RUN par défaut à true. LIVE_SEND ne passe à true que sur décision
+          # de l'utilisateur, après ADM-002, ADM-003 et un test SMTP OVH.
+          DRY_RUN: ${{ vars.DRY_RUN }}
+          LIVE_SEND: ${{ vars.LIVE_SEND }}
         run: |
+          DRY_RUN="${DRY_RUN:-true}"
+          LIVE_SEND="${LIVE_SEND:-false}"
           echo "DRY_RUN=$DRY_RUN LIVE_SEND=$LIVE_SEND"
           if [ "$LIVE_SEND" = "true" ]; then
             echo "Envoi réel demandé, mais aucun module d'envoi n'existe à l'étape 2. Arrêt."
             exit 1
           fi
           echo "Étape 2 : squelette. Aucun prospect, aucun envoi, aucune donnée."
-
-      - name: Vérifier qu'aucun secret ne sort dans les logs
-        run: echo "Contrôle des logs : rien à vérifier à cette étape."
