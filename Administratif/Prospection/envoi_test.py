@@ -26,9 +26,9 @@ corps = (
     "Je vous remercie de prendre un instant pour me lire.\n\n"
     "En parcourant votre site, j'ai remarqué que des textes de remplissage « Lorem ipsum » apparaissent "
     "encore dans les sections plats et menu. Un visiteur peut alors avoir le sentiment que le site n'est pas "
-    "tout à fait à jour, alors que vos plats méritent d'être découverts. Je suis moi-même installé à Maurice.\n\n"
+    "tout à fait à jour, alors que vos plats méritent d'être découverts.\n\n"
     "Je suis designer et je conçois des campagnes et des contenus cohérents avec votre marque, pour vos "
-    "réseaux sociaux et votre site.\n\n"
+    "réseaux sociaux et votre site. Je suis basé à Maurice.\n\n"
     "Souhaitez-vous recevoir une idée de campagne pour vos plats ?"
 )
 msg = {"objet": "[TEST] Une campagne pour Chez Pepe Mauritius", "corps": corps, "langue": "fr", "offre": "com"}
