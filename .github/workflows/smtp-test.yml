@@ -1,0 +1,47 @@
+name: test-connexion-mail
+
+# Manuel uniquement. Teste la connexion SMTP et IMAP vers la boîte OVH : identification et fermeture, aucun message envoyé.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Connexion SMTP et IMAP (sans envoi)
+        env:
+          SMTP_HOST: ${{ vars.SMTP_HOST }}
+          SMTP_PORT: ${{ vars.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          IMAP_HOST: ${{ vars.IMAP_HOST }}
+          IMAP_PORT: ${{ vars.IMAP_PORT }}
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import imaplib, os, smtplib, ssl
+          ctx = ssl.create_default_context()
+          host, port = os.environ["SMTP_HOST"], int(os.environ["SMTP_PORT"])
+          print(f"SMTP : {host}:{port}")
+          if port == 465:
+              s = smtplib.SMTP_SSL(host, port, context=ctx, timeout=30)
+          else:
+              s = smtplib.SMTP(host, port, timeout=30)
+              s.starttls(context=ctx)
+          s.login(os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"])
+          print("SMTP : identification réussie (aucun message envoyé)")
+          s.quit()
+
+          ihost, iport = os.environ["IMAP_HOST"], int(os.environ["IMAP_PORT"])
+          print(f"IMAP : {ihost}:{iport}")
+          m = imaplib.IMAP4_SSL(ihost, iport, ssl_context=ctx, timeout=30)
+          m.login(os.environ["IMAP_USER"], os.environ["IMAP_PASSWORD"])
+          typ, _ = m.select("INBOX", readonly=True)
+          print("IMAP : identification réussie, INBOX en lecture seule :", typ)
+          m.logout()
+          PY
