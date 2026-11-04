@@ -32,6 +32,7 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       BASE_CONTACTS_PASSPHRASE: ${{ secrets.BASE_CONTACTS_PASSPHRASE }}
       DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+      SORTIE_SIMULATION: ${{ github.workspace }}/data/simulations
     steps:
       - name: Garde-fous
         run: |

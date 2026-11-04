@@ -106,8 +106,12 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
         else:
             chemin = envoi.ecrire_simulation(eml, SORTIE)
             etat = f"simulé ({chemin})"
-        conn.execute("UPDATE outbox SET statut = 'envoye', date_envoi = ? WHERE id = ?", (aujourdhui.isoformat(), oid))
-        conn.execute("UPDATE prospects SET dernier_contact = ? WHERE id = ?", (aujourdhui.isoformat(), pid))
+        if mode_reel:
+            conn.execute("UPDATE outbox SET statut = 'envoye', date_envoi = ? WHERE id = ?", (aujourdhui.isoformat(), oid))
+            conn.execute("UPDATE prospects SET dernier_contact = ? WHERE id = ?", (aujourdhui.isoformat(), pid))
+        else:
+            # Simulation : rien n'est parti. Le message ne doit pas compter comme envoyé.
+            conn.execute("UPDATE outbox SET statut = 'simule' WHERE id = ?", (oid,))
         conn.commit()
         print(f"[{etat}] {nom} ({typ})")
         traites += 1
@@ -140,6 +144,10 @@ def main():
 
     conn = base.connect()
     try:
+        if not mode_reel:
+            # La simulation ne peut rien avoir envoyé : les lignes marquées « envoye » par erreur redeviennent simulées.
+            conn.execute("UPDATE outbox SET statut = 'simule', date_envoi = NULL WHERE statut = 'envoye'")
+            conn.commit()
         nouveaux = preparer(conn, date.today())
         print(f"File : {nouveaux} prospect(s) ajouté(s).")
         traites = traiter_file(conn, date.today(), base, envoi, redaction, exclus, mode_reel, env)
