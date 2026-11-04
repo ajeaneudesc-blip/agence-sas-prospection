@@ -1,0 +1,4 @@
+*.db
+*.db.enc
+*.env
+.env*
