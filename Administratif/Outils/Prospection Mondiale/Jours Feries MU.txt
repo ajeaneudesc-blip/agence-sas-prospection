@@ -1,0 +1,10 @@
+# Jours fériés mauriciens. Dates reprises des sites tiers consultés le 2026-11-07 (calendriers publics).
+# NON VÉRIFIÉES par l'avis officiel : à remplacer par la liste officielle du Premier ministre / Government Gazette.
+# Sans les dates officielles, les jours listés ci-dessous sont bloqués, et les autres jours ne le sont pas.
+2026-11-02 # Arrival of Indentured Labourers (lundi)
+2026-11-08 # Diwali (dimanche, à vérifier)
+2026-12-25 # Christmas Day
+2027-01-01 # New Year's Day
+2027-01-02 # Lendemain du Nouvel An (à vérifier)
+2026-09-15 # Ganesh Chaturthi (à vérifier : 15 ou 16 septembre selon les sources)
+2026-09-16 # Ganesh Chaturthi (à vérifier)

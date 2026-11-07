@@ -40,8 +40,25 @@ def live_send_autorise():
     return os.environ.get("LIVE_SEND", "false").lower() == "true"
 
 
+FERIES_PATH = os.path.join(OUTILS, "Jours Feries MU.txt")
+
+
+def jours_feries(chemin=FERIES_PATH):
+    """Dates bloquées (AAAA-MM-JJ) lues dans le fichier. Une ligne invalide arrête tout : rien n'est envoyé."""
+    dates = set()
+    if not os.path.exists(chemin):
+        raise RuntimeError(f"Fichier des jours fériés absent : {chemin}. Arrêt.")
+    with open(chemin, encoding="utf-8") as f:
+        for ligne in f:
+            contenu = ligne.split("#", 1)[0].strip()
+            if not contenu:
+                continue
+            dates.add(date.fromisoformat(contenu))
+    return dates
+
+
 def jour_ouvre(d):
-    return d.weekday() < 5
+    return d.weekday() < 5 and d not in jours_feries()
 
 
 def peut_envoyer(conn, prospect_id, type_envoi, email, aujourdhui=None, exclus=frozenset()):
