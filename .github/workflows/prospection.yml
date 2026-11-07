@@ -34,6 +34,13 @@ jobs:
       DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
       SORTIE_SIMULATION: ${{ github.workspace }}/data/simulations
       DONNEES_DIR: ${{ github.workspace }}/data
+      IMAP_HOST: ${{ vars.IMAP_HOST }}
+      IMAP_PORT: ${{ vars.IMAP_PORT }}
+      IMAP_USER: ${{ secrets.IMAP_USER }}
+      IMAP_PASSWORD: ${{ secrets.IMAP_PASSWORD }}
+      NOTIFY_TO: ${{ secrets.NOTIFY_TO }}
+      SMTP_USER: ${{ secrets.SMTP_USER }}
+      SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
     steps:
       - name: Garde-fous
         run: |
@@ -90,6 +97,7 @@ jobs:
             touch "$GITHUB_WORKSPACE/data/.candidats_importes"
           fi
           python3 lancer.py
+          python3 reponses.py
           python3 base-contacts.py chiffrer
           cp contacts.db.enc "$GITHUB_WORKSPACE/data/contacts.db.enc"
 

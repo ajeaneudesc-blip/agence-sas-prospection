@@ -95,8 +95,9 @@ def valider(msg, type_envoi="premier"):
         motifs.append("date mal formée (AAAA-MM-JJ)")
 
     mots = corps.split()
-    if not 60 <= len(mots) <= 100:
-        motifs.append(f"corps de {len(mots)} mots (60 à 100 attendus)")
+    minimum = 60 if type_envoi == "premier" else 30
+    if not minimum <= len(mots) <= 100:
+        motifs.append(f"corps de {len(mots)} mots ({minimum} à 100 attendus)")
     if RE_CHIFFRE.search(corps + " " + objet):
         motifs.append("chiffre présent (prix ou chiffre ferme interdit)")
     if RE_MONNAIE.search(corps + " " + objet):
@@ -133,9 +134,17 @@ def valider(msg, type_envoi="premier"):
 def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
     """Secours sans API : remplit le gabarit VALIDÉ avec la phrase de raison vérifiée du prospect.
     Le texte reste celui du gabarit validé ; seules les accolades sont remplies. Même validateur ensuite."""
-    phrase = (prospect.get("phrase") or "").strip()
-    if not phrase:
-        raise ValueError("Phrase de raison absente : impossible de rédiger sans API.")
+    relance = type_envoi.startswith("relance")
+    if relance:
+        phrase = (prospect.get("relance") or "").strip()
+        question = (prospect.get("question") or "").strip()
+        if not phrase or not question:
+            raise ValueError("Phrase ou question de relance absente : relance non rédigée.")
+    else:
+        phrase = (prospect.get("phrase") or "").strip()
+        if not phrase:
+            raise ValueError("Phrase de raison absente : impossible de rédiger sans API.")
+        question = ""
     lignes = gabarit_fr.split("\n")
     objet = ""
     corps_l = []
@@ -148,6 +157,12 @@ def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
         corps_l.append(ligne)
     corps = "\n".join(corps_l).strip()
     nom = prospect.get("nom", "")
+    if relance:
+        # La relance reprend l'objet du premier message : « Re : » suivi du nom de l'entreprise.
+        objet = "Re : " + nom
+        corps = re.sub(r"\{Même objet[^}]*\}", "", corps)
+        corps = re.sub(r"\{une phrase[^}]*\}", phrase, corps)
+        corps = re.sub(r"\{La même question[^}]*\}", question, corps)
     objet = re.sub(r"\{Entreprise\}", nom, objet)
     corps = re.sub(r"\{Entreprise\}", nom, corps)
     corps = re.sub(r"\{Prénom[^}]*\}", "Madame, Monsieur", corps)
@@ -173,7 +188,8 @@ def rendu_sans_api(prospect, gabarit_fr, type_envoi="premier"):
         "raison": prospect.get("raison", ""),
         "source": prospect.get("source_url", ""),
         "date": prospect.get("date_consultation", ""),
-        "humanise": False,
+        # Décision de l'utilisateur : la phrase écrite et relue par lot suffit comme humanisation sans API.
+        "humanise": True,
     }
 
 

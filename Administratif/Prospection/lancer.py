@@ -71,6 +71,43 @@ def appliquer_corrections(conn):
     return len(corrections)
 
 
+def preparer_relances(conn, aujourdhui):
+    """Crée la relance 1 (3 jours après le premier envoi réel) et la relance 2 (4 jours après la relance 1),
+    seulement si la relance est rédigée dans les notes (phrase et question validées par lot)."""
+    ajoutees = 0
+    premiers = conn.execute(
+        "SELECT o.prospect_id, o.date_envoi, p.notes FROM outbox o JOIN prospects p ON p.id = o.prospect_id "
+        "WHERE o.type = 'premier' AND o.statut = 'envoye' AND o.date_envoi IS NOT NULL"
+    ).fetchall()
+    for pid, date_envoi, notes in premiers:
+        if not champ_depuis_notes(notes, "Relance") or not champ_depuis_notes(notes, "Question"):
+            continue
+        d1 = date.fromisoformat(date_envoi) + timedelta(days=3)
+        existe = conn.execute("SELECT 1 FROM outbox WHERE prospect_id = ? AND type = 'relance1'", (pid,)).fetchone()
+        if not existe:
+            conn.execute(
+                "INSERT INTO outbox (prospect_id, type, gabarit, statut, date_prevue) VALUES (?, 'relance1', NULL, 'file', ?)",
+                (pid, prochain_jour_ouvre(max(d1, aujourdhui)).isoformat()),
+            )
+            ajoutees += 1
+    for pid, date_r1, notes in conn.execute(
+        "SELECT o.prospect_id, o.date_envoi, p.notes FROM outbox o JOIN prospects p ON p.id = o.prospect_id "
+        "WHERE o.type = 'relance1' AND o.statut = 'envoye' AND o.date_envoi IS NOT NULL"
+    ).fetchall():
+        if not champ_depuis_notes(notes, "Relance") or not champ_depuis_notes(notes, "Question"):
+            continue
+        d2 = date.fromisoformat(date_r1) + timedelta(days=4)
+        existe = conn.execute("SELECT 1 FROM outbox WHERE prospect_id = ? AND type = 'relance2'", (pid,)).fetchone()
+        if not existe:
+            conn.execute(
+                "INSERT INTO outbox (prospect_id, type, gabarit, statut, date_prevue) VALUES (?, 'relance2', NULL, 'file', ?)",
+                (pid, prochain_jour_ouvre(max(d2, aujourdhui)).isoformat()),
+            )
+            ajoutees += 1
+    conn.commit()
+    return ajoutees
+
+
 def preparer(conn, aujourdhui):
     """Crée un premier message en file pour chaque prospect « à contacter » qui n'en a pas encore."""
     lignes = conn.execute(
@@ -95,7 +132,9 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
     dus = conn.execute(
         "SELECT o.id, o.prospect_id, o.type, o.gabarit, p.nom, p.email, p.pays, p.source, p.source_date "
         "FROM outbox o JOIN prospects p ON p.id = o.prospect_id "
-        "WHERE o.statut = 'file' AND o.date_prevue <= ? ORDER BY o.date_prevue, o.id",
+        "WHERE o.statut = 'file' AND o.date_prevue <= ? "
+        + ("" if mode_reel else "AND o.simule_le IS NULL ")
+        + "ORDER BY o.date_prevue, o.id",
         (aujourdhui.isoformat(),),
     ).fetchall()
     traites = 0
@@ -122,6 +161,7 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
             "nom": nom, "pays": pays, "source_url": source, "date_consultation": source_date,
             "offre": offre_depuis_notes(notes), "raison": champ_depuis_notes(notes, "Raison vérifiée"),
             "phrase": champ_depuis_notes(notes, "Phrase"), "produit": champ_depuis_notes(notes, "Produit"),
+            "relance": champ_depuis_notes(notes, "Relance"), "question": champ_depuis_notes(notes, "Question"),
         }
         msg = redaction.generer(prospect, gabarit_fr, typ)
         if mode_reel and not msg.get("humanise"):
@@ -140,6 +180,9 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
         if mode_reel:
             conn.execute("UPDATE outbox SET statut = 'envoye', date_envoi = ? WHERE id = ?", (aujourdhui.isoformat(), oid))
             conn.execute("UPDATE prospects SET dernier_contact = ? WHERE id = ?", (aujourdhui.isoformat(), pid))
+        else:
+            # Simulation : ce message est produit une seule fois ; il ne sera pas regénéré les jours suivants.
+            conn.execute("UPDATE outbox SET simule_le = ? WHERE id = ?", (aujourdhui.isoformat(), oid))
         conn.commit()
         print(f"[{etat}] {nom} ({typ})")
         traites += 1
@@ -170,6 +213,8 @@ def main():
     if mode_reel and not (env["SMTP_LOGIN"] and env["SMTP_KEY"]):
         sys.exit("Envoi réel demandé sans identifiants SMTP : arrêt.")
 
+    base.migrer()
+    base.purge()  # conservation 24 mois (D10) : idempotent, sans effet si rien n'est échu
     conn = base.connect()
     try:
         if not mode_reel:
@@ -177,6 +222,8 @@ def main():
             conn.execute("UPDATE outbox SET statut = 'file', date_envoi = NULL WHERE statut = 'envoye'")
             conn.commit()
         appliquer_corrections(conn)
+        relances = preparer_relances(conn, date.today())
+        print(f"Relances : {relances} ajoutée(s).")
         nouveaux = preparer(conn, date.today())
         print(f"File : {nouveaux} prospect(s) ajouté(s).")
         traites = traiter_file(conn, date.today(), base, envoi, redaction, exclus, mode_reel, env)

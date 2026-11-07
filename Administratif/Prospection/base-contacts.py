@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS outbox (
         CHECK (statut IN ('file', 'envoye', 'echec', 'annule')),
     date_prevue TEXT NOT NULL,
     date_envoi TEXT,
+    simule_le TEXT,
     UNIQUE (prospect_id, type)
 );
 CREATE TABLE IF NOT EXISTS reponses (
@@ -117,9 +118,12 @@ def migrer(path=None):
     """Ajoute les tables manquantes (outbox, reponses, oppositions) sans toucher aux données existantes."""
     conn = connect(path)
     conn.executescript(SCHEMA)
+    colonnes = {r[1] for r in conn.execute("PRAGMA table_info(outbox)")}
+    if "simule_le" not in colonnes:
+        conn.execute("ALTER TABLE outbox ADD COLUMN simule_le TEXT")
     conn.commit()
     conn.close()
-    print("Migration effectuée : tables à jour, données inchangées.")
+    print("Migration effectuée : tables et colonnes à jour, données inchangées.")
 
 
 def opposer(email, path=None, conn=None):

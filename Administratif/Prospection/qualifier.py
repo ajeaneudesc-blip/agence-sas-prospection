@@ -110,7 +110,9 @@ def ecrire(cand, conn):
             "Raison vérifiée : " + cand["raison"].strip()
             + " | Offre : " + cand.get("offre", "").strip()
             + " | Phrase : " + cand.get("phrase", "").strip()
-            + " | Produit : " + cand.get("produit", "").strip(),
+            + " | Produit : " + cand.get("produit", "").strip()
+            + " | Relance : " + cand.get("relance", "").strip().replace("|", "/")
+            + " | Question : " + cand.get("question", "").strip().replace("|", "/"),
         ),
     )
 
