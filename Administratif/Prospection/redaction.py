@@ -266,3 +266,33 @@ def _generer_api(prospect, gabarit_fr, type_envoi="premier"):
     if motifs:
         raise ValueError("Message refusé : " + " ; ".join(motifs))
     return humaniser(msg, prospect)
+
+
+def reecrire_ollama(msg, essais=3):
+    """Réécriture locale (Ollama, sur le runner ou le PC). Chaque essai est repassé par le validateur.
+    Renvoie le message réécrit, ou None si aucun essai ne passe : le message garde alors le gabarit validé."""
+    import urllib.request
+    url = os.environ.get("OLLAMA_URL", "http://localhost:11434") + "/api/chat"
+    modele = os.environ.get("OLLAMA_MODELE", "qwen2.5:7b")
+    consigne = (
+        "Réécris ce message de prospection en français. Garde exactement les faits, la structure, la question finale "
+        "et la formule « Bonjour, Madame, Monsieur ». Ton poli, chaleureux, centré sur le problème du client. "
+        "Entre 60 et 90 mots. Pas de chiffre, pas de « nous », pas de tirets longs, pas de « ce n'est pas X, c'est Y ». "
+        "Réponds uniquement par un objet JSON {\"corps\": \"...\"}.\n\n"
+    )
+    for _ in range(essais):
+        corps = json.dumps({"model": modele, "messages": [{"role": "user", "content": consigne + msg["corps"]}],
+                            "format": "json", "stream": False, "options": {"temperature": 0.3}}).encode("utf-8")
+        try:
+            req = urllib.request.Request(url, data=corps, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=300) as rep:
+                texte = json.loads(json.loads(rep.read())["message"]["content"])["corps"]
+        except Exception:
+            return None
+        candidat = dict(msg)
+        candidat["corps"] = texte.strip()
+        if not valider(candidat, "premier") and candidat["corps"].count("?") == 1:
+            candidat["humanise"] = True
+            candidat["reecrit"] = "ollama"
+            return candidat
+    return None

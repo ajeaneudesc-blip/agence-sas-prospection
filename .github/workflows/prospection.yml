@@ -83,6 +83,25 @@ jobs:
           python-version: "3.12"
       - run: pip install anthropic sqlcipher3-binary
 
+      - name: Modèle local (Ollama, qwen2.5:7b) - facultatif
+        run: |
+          # Si l'installation échoue, le passage continue avec les gabarits validés (USE_OLLAMA=false).
+          echo "USE_OLLAMA=false" >> "$GITHUB_ENV"
+          if curl -fsSL https://ollama.com/install.sh | sh; then
+            (ollama serve > "$RUNNER_TEMP/ollama.log" 2>&1 &)
+            for i in $(seq 1 30); do curl -sf http://localhost:11434/api/tags >/dev/null && break; sleep 2; done
+            if ollama pull qwen2.5:7b; then
+              echo "USE_OLLAMA=true" >> "$GITHUB_ENV"
+              echo "Modèle prêt."
+            fi
+          fi
+
+      - name: Cache des modèles Ollama
+        uses: actions/cache@v4
+        with:
+          path: ~/.ollama/models
+          key: ollama-qwen2.5-7b-v1
+
       - name: Passage
         working-directory: Administratif/Prospection
         run: |

@@ -164,6 +164,13 @@ def traiter_file(conn, aujourdhui, base, envoi, redaction, exclus, mode_reel, en
             "relance": champ_depuis_notes(notes, "Relance"), "question": champ_depuis_notes(notes, "Question"),
         }
         msg = redaction.generer(prospect, gabarit_fr, typ)
+        if os.environ.get("USE_OLLAMA", "false").lower() == "true":
+            reecrit = redaction.reecrire_ollama(msg)
+            if reecrit:
+                msg = reecrit
+                print(f"[réécrit par Ollama] {nom} ({typ})")
+            else:
+                print(f"[Ollama : aucun essai valide, gabarit validé conservé] {nom} ({typ})")
         if mode_reel and not msg.get("humanise"):
             # Envoi réel : un message non passé par l'humanizer ne part pas (rédaction de secours sans API).
             raise RuntimeError("Message non humanisé (API indisponible) : envoi réel refusé, rien n'est parti.")
